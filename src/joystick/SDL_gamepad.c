@@ -1316,6 +1316,8 @@ static GamepadMapping_t *SDL_CreateMappingForHIDAPIGamepad(SDL_GUID guid)
             }
         } else if (vendor == USB_VENDOR_8BITDO && product == USB_PRODUCT_8BITDO_ULTIMATE2_WIRELESS) {
             SDL_strlcat(mapping_string, "paddle1:b12,paddle2:b11,paddle3:b14,paddle4:b13,", sizeof(mapping_string));
+        } else if (vendor == USB_VENDOR_8BITDO && product == USB_PRODUCT_8BITDO_ULTIMATE2C_WIRELESS) {
+            SDL_strlcat(mapping_string, "paddle1:b12,paddle2:b11,", sizeof(mapping_string));
         } else {
             switch (SDL_GetGamepadTypeFromGUID(guid, NULL)) {
             case SDL_GAMEPAD_TYPE_PS4:
@@ -1348,38 +1350,6 @@ static GamepadMapping_t *SDL_CreateMappingForHIDAPIGamepad(SDL_GUID guid)
             }
         }
     }
-
-    return SDL_PrivateAddMappingForGUID(guid, mapping_string, &existing, SDL_GAMEPAD_MAPPING_PRIORITY_DEFAULT);
-}
-
-/*
- * Helper function to guess at a mapping for RAWINPUT gamepads
- */
-static GamepadMapping_t *SDL_CreateMappingForRAWINPUTGamepad(SDL_GUID guid)
-{
-    bool existing;
-    char mapping_string[1024];
-
-    SDL_strlcpy(mapping_string, "none,*,", sizeof(mapping_string));
-    SDL_strlcat(mapping_string, "a:b0,b:b1,x:b2,y:b3,back:b6,guide:b10,start:b7,leftstick:b8,rightstick:b9,leftshoulder:b4,rightshoulder:b5,dpup:h0.1,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,leftx:a0,lefty:a1,rightx:a2,righty:a3,lefttrigger:a4,righttrigger:a5,", sizeof(mapping_string));
-
-    return SDL_PrivateAddMappingForGUID(guid, mapping_string, &existing, SDL_GAMEPAD_MAPPING_PRIORITY_DEFAULT);
-}
-
-/*
- * Helper function to guess at a mapping for WGI gamepads
- */
-static GamepadMapping_t *SDL_CreateMappingForWGIGamepad(SDL_GUID guid)
-{
-    bool existing;
-    char mapping_string[1024];
-
-    if (guid.data[15] != SDL_JOYSTICK_TYPE_GAMEPAD) {
-        return NULL;
-    }
-
-    SDL_strlcpy(mapping_string, "none,*,", sizeof(mapping_string));
-    SDL_strlcat(mapping_string, "a:b0,b:b1,x:b2,y:b3,back:b6,start:b7,leftstick:b8,rightstick:b9,leftshoulder:b4,rightshoulder:b5,dpup:b10,dpdown:b12,dpleft:b13,dpright:b11,leftx:a1,lefty:a0~,rightx:a3,righty:a2~,lefttrigger:a4,righttrigger:a5,", sizeof(mapping_string));
 
     return SDL_PrivateAddMappingForGUID(guid, mapping_string, &existing, SDL_GAMEPAD_MAPPING_PRIORITY_DEFAULT);
 }
@@ -1483,10 +1453,6 @@ static GamepadMapping_t *SDL_PrivateGetGamepadMappingForGUID(SDL_GUID guid, bool
 #endif
     if (SDL_IsJoystickHIDAPI(guid)) {
         mapping = SDL_CreateMappingForHIDAPIGamepad(guid);
-    } else if (SDL_IsJoystickRAWINPUT(guid)) {
-        mapping = SDL_CreateMappingForRAWINPUTGamepad(guid);
-    } else if (SDL_IsJoystickWGI(guid)) {
-        mapping = SDL_CreateMappingForWGIGamepad(guid);
     } else if (SDL_IsJoystickVIRTUAL(guid)) {
         // We'll pick up a robust mapping in VIRTUAL_JoystickGetGamepadMapping
 #ifdef SDL_PLATFORM_ANDROID
@@ -3476,7 +3442,12 @@ Sint16 SDL_GetGamepadAxis(SDL_Gamepad *gamepad, SDL_GamepadAxis axis)
                 bool valid_output_range;
 
                 if (binding->input_type == SDL_GAMEPAD_BINDTYPE_AXIS) {
-                    value = SDL_GetJoystickAxis(gamepad->joystick, binding->input.axis.axis);
+                    const int input_axis = binding->input.axis.axis;
+                    /* Missing axes return zero, which would normalize to a half-pressed trigger. */
+                    if (input_axis < 0 || input_axis >= gamepad->joystick->naxes) {
+                        continue;
+                    }
+                    value = SDL_GetJoystickAxis(gamepad->joystick, input_axis);
                     if (binding->input.axis.axis_min < binding->input.axis.axis_max) {
                         valid_input_range = (value >= binding->input.axis.axis_min && value <= binding->input.axis.axis_max);
                     } else {
